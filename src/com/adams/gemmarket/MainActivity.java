@@ -1,5 +1,6 @@
 package com.adams.gemmarket;
 
+import java.util.List;
 import java.util.UUID;
 
 import android.app.Activity;
@@ -10,14 +11,18 @@ import android.view.Menu;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.adams.gemmarket.util.IabHelper;
 import com.adams.gemmarket.util.IabResult;
 import com.adams.gemmarket.util.Inventory;
 import com.adams.gemmarket.util.Purchase;
+import com.parse.FindCallback;
 import com.parse.LogInCallback;
 import com.parse.ParseException;
+import com.parse.ParseObject;
+import com.parse.ParseQuery;
 import com.parse.ParseUser;
 
 public class MainActivity extends Activity {
@@ -26,7 +31,8 @@ public class MainActivity extends Activity {
 	private Button purchaseButton;
 	private Button spendButton;
 	private String base64EncodedPublicKey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjRX6qKpcQpRELgXBiJuoKi3VvtyWZUgjQpaXjuhPAVxMEP/LsABRjaRWjToqbROfCeBBp6SwfFPjJOE9NCEWL7jswFx2Gl7BsULclAVQ9KC8wMcpowmwKZXUjeflJi3G4WjxoSRK/4BxdumuNlPKYMyK7gVzv/gvMBGXC82z5rWoovecIDAMaUSCKvOr8ZleYSrelUWfCvo9vqDHCa7SW7vX4m0Af2c0cAStOPDI/aHwDURVwy1CDb2FmcKwCiXrBfYkWMgox7FYQJcuuoM8VVYTNY0FTd964P8Lk6sH23vyOcweKMRacrqOelcXgLAowM4JX3LM8adb+KTmqmBfmQIDAQAB";
-	private static final String ITEM_SKU = "com.adams.gemmarket.100gems";
+//	private static final String ITEM_SKU = "com.adams.gemmarket.100gems";
+	private static final String ITEM_SKU = "android.test.purchased";
 
 	IabHelper mHelper;
 
@@ -48,8 +54,46 @@ public class MainActivity extends Activity {
 	}
 
 	private void initApplication() {
+		syncGemCounter();
 		setUpInAppBilling();
 		setButtonsBehaviors();
+	}
+
+	private void syncGemCounter() {
+		syncPurchases();
+		syncSpents();
+	}
+
+	private void syncSpents() {
+		ParseQuery<ParseObject> query = ParseQuery.getQuery("Spent");
+		query.whereEqualTo("username", ParseUser.getCurrentUser().getUsername());
+		query.findInBackground(new FindCallback<ParseObject>() {
+		    public void done(List<ParseObject> scoreList, ParseException e) {
+		        if (e == null) {
+		            for (int i = 0; i < scoreList.size(); i++) {
+						decreaseGemCounter();
+					}
+		        } else {
+		            Log.e("score", "Error: " + e.getMessage());
+		        }
+		    }
+		});
+	}
+
+	private void syncPurchases() {
+		ParseQuery<ParseObject> query = ParseQuery.getQuery("Purchase");
+		query.whereEqualTo("username", ParseUser.getCurrentUser().getUsername());
+		query.findInBackground(new FindCallback<ParseObject>() {
+		    public void done(List<ParseObject> scoreList, ParseException e) {
+		        if (e == null) {
+		            for (int i = 0; i < scoreList.size(); i++) {
+						increaseGemCounter();
+					}
+		        } else {
+		            Log.e("score", "Error: " + e.getMessage());
+		        }
+		    }
+		});
 	}
 
 	private void setUpInAppBilling() {
@@ -87,8 +131,10 @@ public class MainActivity extends Activity {
 		spendButton.setOnClickListener(new OnClickListener() {
 			@Override
 			public void onClick(View v) {
-				Toast.makeText(getBaseContext(), "You spent 55 gems", Toast.LENGTH_LONG).show();
+				saveSpentInParse();
+				decreaseGemCounter();
 			}
+
 		});
 	}
 
@@ -122,12 +168,42 @@ public class MainActivity extends Activity {
 		public void onConsumeFinished(Purchase purchase, IabResult result) {
 
 			if (result.isSuccess()) {
+				savePurchaseInParse();
+				increaseGemCounter();
 				purchaseButton.setEnabled(true);
 			} else {
 				Log.e("CONSUME INVENTORY", "In-app Billing Consume Invetory Failed: " + result);
 			}
 		}
 	};
+	
+	private void increaseGemCounter() {
+		TextView gemsCounter = (TextView) findViewById(R.id.gems_count);
+		Integer currentCounter = Integer.valueOf(gemsCounter.getText().toString());
+		currentCounter = currentCounter + 100;
+		gemsCounter.setText(currentCounter.toString());
+	}
+	
+	private void decreaseGemCounter() {
+		TextView gemsCounter = (TextView) findViewById(R.id.gems_count);
+		Integer currentCounter = Integer.valueOf(gemsCounter.getText().toString());
+		currentCounter = currentCounter - 55;
+		gemsCounter.setText(currentCounter.toString());
+	}
+	
+	private void savePurchaseInParse() {
+		ParseObject purchase = new ParseObject("Purchase");
+		purchase.put("username", ParseUser.getCurrentUser().getUsername());
+		purchase.put("sku", ITEM_SKU);
+		purchase.saveInBackground();
+	}
+	
+
+	private void saveSpentInParse() {
+		ParseObject purchase = new ParseObject("Spent");
+		purchase.put("username", ParseUser.getCurrentUser().getUsername());
+		purchase.saveInBackground();
+	}
 
 	@Override
 	public void onDestroy() {
